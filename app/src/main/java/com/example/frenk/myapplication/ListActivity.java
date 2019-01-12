@@ -1,18 +1,21 @@
 package com.example.frenk.myapplication;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.view.ContextMenu;
+import android.view.MenuInflater;
 import android.view.View;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.AdapterView;
-import android.widget.ListView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,48 +24,82 @@ public class ListActivity extends AppCompatActivity {
 
     private ItemAdapter adapter;
     private List<ListItem> items;
-    private ListView listView;
+    private RecyclerView recyclerView;
+    private DataSource source;
+    private ListItem currentListItem;
+    private int currentPosition;
+    private View currentView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_list);
+
+        this.source = new DataSource(this);
+
+        // Set toolbar
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        listView = (ListView) findViewById(R.id.listView);
+        // Get recycler view
+        recyclerView = (RecyclerView) findViewById(R.id.listView);
 
-        items = new ArrayList<ListItem>();
+        // Get items from database
+        items = this.source.getList();
 
-        adapter = new ItemAdapter(this, R.layout.row_item, items);
+        // Create new linear layout manager
+        LinearLayoutManager layoutManager = new LinearLayoutManager(this);
 
-        listView.setAdapter(adapter);
+        // Set recycler view layout manager to the above manager
+        recyclerView.setLayoutManager(layoutManager);
+        recyclerView.setHasFixedSize(true);
 
-        registerForContextMenu(listView);
 
-        items.add(new ListItem("Google", "www.google.nl"));
-        items.add(new ListItem("Facebook", "www.facebook.com"));
-        adapter.notifyDataSetChanged();
 
-        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        // Initialize ItemAdapter (RecycleViewAdapter)
+        adapter = new ItemAdapter(items, new ItemAdapter.CustomItemClickListener() {
             @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            public void onItemClick(View v, int position) {
 
                 //Create an Intent
                 Intent intent = new Intent(ListActivity.this, WebviewActivity.class);
-                ListItem clickedItem = (ListItem) parent.getItemAtPosition(position);
+
+                // Get list item
+                ListItem clickedItem = adapter.getItemAt(position - 1);
+
+                // Set intent description
                 intent.putExtra("description", clickedItem.getDescription());
+
                 //Open the new screen by starting the activity
                 startActivity(intent);
+            }
+        }, new ItemAdapter.CustomItemLongClickListener() {
+            @Override
+            public void onItemLongClick(View v, int position) {
+                ViewHolder viewHolder = (ViewHolder) recyclerView.findViewHolderForItemId(v.getId());
+                //int position = viewHolder.getLayoutPosition();
+                currentListItem = items.get(position);
+                currentPosition = position;
 
+                openContextMenu(v);
             }
         });
 
+        // Set adapter
+        recyclerView.setAdapter(adapter);
+
+        registerForContextMenu(recyclerView);
+
+        // + action button to add
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+
+                // Get intent
                 Intent intent = new Intent(view.getContext(), NewItemActivity.class);
+
+                // Start new item activity
                 startActivityForResult(intent, 1234);
             }
         });
@@ -70,52 +107,105 @@ public class ListActivity extends AppCompatActivity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        //Check if the result code is the right one
+        // Check if the result code is the right one
         if (resultCode == Activity.RESULT_OK) {
-            //Check if the request code is correct
+            // Check if the request code is correct
             if (requestCode == 1234) {
-                //Everything's fine, get the values;
+                // Everything's fine, get the values;
                 String title = data.getStringExtra("title");
                 String description = data.getStringExtra("description");
 
-                //Create a list item from the values
+                // Create a list item from the values
                 ListItem item = new ListItem(title, description);
 
-                //Add the new item to the adapter;
+                // Add item to db
+                this.source.addListItem(item);
+
+                // Add the new item to the adapter;
                 items.add(item);
 
-                //Have the adapter update
+                // Update adapter item list
+                adapter.setItems(this.items);
+
+                // Have the adapter update
+                adapter.notifyDataSetChanged();
+
+
+                // Set recycler view visibility to visible if necessary
+                if (recyclerView.getVisibility() == View.GONE) {
+                    recyclerView.setVisibility(View.VISIBLE);
+                }
+            } else if (requestCode == 4321){
+                // Everything's fine, get the values;
+                String title = data.getStringExtra("title");
+                String oldTitle = data.getStringExtra("oldTitle");
+                String website = data.getStringExtra("description");
+
+                // Update in db
+                this.source.update(oldTitle, new ListItem(title, website));
+
+                // Update to updated list
+                this.items = this.source.getList();
+
+                // Update adapter item list
+                adapter.setItems(this.items);
+
+                adapter.notifyItemRemoved(currentPosition - 1);
+                adapter.notifyItemRangeChanged(0, this.items.size());
+
+                // Have the adapter update
                 adapter.notifyDataSetChanged();
             }
         }
         super.onActivityResult(requestCode, resultCode, data);
     }
 
+    /**
+     * MENU
+     */
+
     @Override
-    public void onCreateContextMenu(ContextMenu menu, View view, ContextMenu.ContextMenuInfo menuInfo) {
-        //Get the clicked item
-
-        //Inflate the context menu from the resource file
-        getMenuInflater().inflate(R.menu.context_menu, menu);
-
-
-        //Let Android do its magic
-        super.onCreateContextMenu(menu, view, menuInfo);
+    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
+        super.onCreateContextMenu(menu, v, menuInfo);
+        if (v.getId()==R.id.listView) {
+            MenuInflater inflater = getMenuInflater();
+            inflater.inflate(R.menu.menu_list, menu);
+        }
     }
 
     @Override
     public boolean onContextItemSelected(MenuItem item) {
-        //Retrieve info about the long pressed list item
-        AdapterView.AdapterContextMenuInfo itemInfo = (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
-        if (item.getItemId() == R.id.context_menu_delete_item) {
-            //Remove the item from the list
-            items.remove(itemInfo.position);
+        AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
+        switch(item.getItemId()) {
+            case R.id.edit:
+                // edit stuff here
 
-            //Update the adapter to reflect the list change
-            adapter.notifyDataSetChanged();
-            return true;
+                // TODO edit in db
+                // Get intent
+                Intent intent = new Intent(this.recyclerView.getContext(), EditItemActivity.class);
+
+                intent.putExtra("title", this.currentListItem.getTitle());
+                intent.putExtra("website", this.currentListItem.getDescription());
+
+                // Start new item activity
+                startActivityForResult(intent, 4321);
+                return true;
+            case R.id.delete:
+
+                if (!this.source.removeListItem(currentListItem.getTitle())) return false;
+
+                // Change list to items from db (to remove the item from the in-memory list)
+                this.items = this.source.getList();
+
+                // Set adapter items
+                adapter.setItems(items);
+
+                // Notify change so the item actually gets removed from the screen
+                adapter.notifyDataSetChanged();
+
+                return true;
+            default:
+                return super.onContextItemSelected(item);
         }
-
-        return super.onContextItemSelected(item);
     }
 }

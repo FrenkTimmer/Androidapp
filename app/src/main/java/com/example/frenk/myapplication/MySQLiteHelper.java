@@ -25,7 +25,7 @@ public class MySQLiteHelper extends SQLiteOpenHelper {
             "CREATE TABLE " + TABLE_LISTITEM +
                     "(" +
                     COLUMN_LISTITEM_ID + " integer primary key autoincrement, " +
-                    COLUMN_NAME + " text not null" +
+                    COLUMN_NAME + " text not null, " +
                     COLUMN_WEBSITE + " text not null" +
                     ");";
 
