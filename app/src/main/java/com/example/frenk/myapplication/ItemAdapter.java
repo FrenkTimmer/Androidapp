@@ -121,10 +121,6 @@ public class ItemAdapter extends RecyclerView.Adapter<ViewHolder> {
         return this.items.get(position);
     }
 
-    public void resetCount() {
-        // Set count to 0
-        this.count= 0;
-    }
     public void setItems(List<ListItem> items) {
         this.items = items;
     }

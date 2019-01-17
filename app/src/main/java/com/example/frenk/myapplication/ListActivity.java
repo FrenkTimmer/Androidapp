@@ -29,7 +29,7 @@ public class ListActivity extends AppCompatActivity {
     private ListItem currentListItem;
     private int currentPosition;
     private View currentView;
-
+    
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -65,7 +65,7 @@ public class ListActivity extends AppCompatActivity {
                 Intent intent = new Intent(ListActivity.this, WebviewActivity.class);
 
                 // Get list item
-                ListItem clickedItem = adapter.getItemAt(position - 1);
+                ListItem clickedItem = adapter.getItemAt(position);
 
                 // Set intent description
                 intent.putExtra("description", clickedItem.getDescription());
